@@ -94,13 +94,14 @@ app.get('/', (_req, res) => {
 // SIGNUP
 // ────────────────────────────────────────────────────────────────────────────────
 app.post('/signup', async (req, res) => {
+  const now = date.now();
   const { firstName, lastName, email, svsuId, username, password } = req.body;
   try {
     const [result] = await pool.execute(
       `INSERT INTO users
-         (first_name, last_name, email, svsu_id, username, password)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [firstName, lastName, email, svsuId, username, password]
+         (first_name, last_name, email, svsu_id, username, password, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [firstName, lastName, email, svsuId, username, password, now]
     );
     res.json({ success: true, userId: result.insertId });
   } catch (err) {
