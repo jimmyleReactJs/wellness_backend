@@ -94,7 +94,7 @@ app.get('/', (_req, res) => {
 // SIGNUP
 // ────────────────────────────────────────────────────────────────────────────────
 app.post('/signup', async (req, res) => {
-  const now = date.now();
+  const now = new Date();
   const { firstName, lastName, email, svsuId, username, password } = req.body;
   try {
     const [result] = await pool.execute(
