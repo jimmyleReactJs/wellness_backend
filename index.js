@@ -116,6 +116,32 @@ app.post('/signup', async (req, res) => {
   }
 });
 
+app.post('/save-profile', async (req, res) => {
+  const { username, birthday, weight, height, fitnessLevel, gender } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ success: false, message: 'Missing username' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      `UPDATE users
+       SET birthday = ?, weight = ?, height = ?, fitness_level = ?, gender = ?
+       WHERE username = ?`,
+      [birthday, weight, height, fitnessLevel, gender, username]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'Profile saved successfully' });
+  } catch (err) {
+    console.error('Save profile error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // ────────────────────────────────────────────────────────────────────────────────
 // LOGIN
 // ────────────────────────────────────────────────────────────────────────────────
@@ -634,6 +660,6 @@ app.get('/videos/:id', async (req, res) => {
 // Start the server
 // ────────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`API listening on port ${PORT}`);
 });
