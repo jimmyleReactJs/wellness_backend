@@ -117,7 +117,16 @@ app.post('/signup', async (req, res) => {
 });
 
 app.post('/save-profile', async (req, res) => {
-  const { username, birthday, weight, height, fitnessLevel, gender } = req.body;
+  const {
+    username,
+    birthday,
+    weight,
+    height,
+    fitnessLevel,
+    gender,
+    suggestedWaterMl,
+    bottleSizeMl,
+  } = req.body;
 
   if (!username) {
     return res.status(400).json({ success: false, message: 'Missing username' });
@@ -126,9 +135,24 @@ app.post('/save-profile', async (req, res) => {
   try {
     const [result] = await pool.execute(
       `UPDATE users
-       SET birthday = ?, weight = ?, height = ?, fitness_level = ?, gender = ?
+       SET birthday = ?,
+           weight = ?,
+           height = ?,
+           fitness_level = ?,
+           gender = ?,
+           suggested_water_ml = ?,
+           bottle_size_ml = ?
        WHERE username = ?`,
-      [birthday, weight, height, fitnessLevel, gender, username]
+      [
+        birthday,
+        weight,
+        height,
+        fitnessLevel,
+        gender,
+        suggestedWaterMl,
+        bottleSizeMl,
+        username,
+      ]
     );
 
     if (result.affectedRows === 0) {
@@ -186,15 +210,19 @@ app.get('/profile', async (req, res) => {
          height,
          weight,
          fitness_level        AS fitnessLevel,
+         suggested_water_ml   AS suggestedWaterMl,
+         bottle_size_ml       AS bottleSizeMl,
          profile_image_url    AS profileImageUrl
        FROM users
        WHERE username = ?
        LIMIT 1`,
       [username]
     );
+
     if (!rows.length) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
+
     res.json(rows[0]);
   } catch (err) {
     console.error('GET /profile error:', err);
