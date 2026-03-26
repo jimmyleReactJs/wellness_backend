@@ -251,6 +251,62 @@ app.post('/profile/avatar', uploadAvatar.single('avatar'), async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
+// UPDATE PROFILE
+// ────────────────────────────────────────────────────────────────────────────────
+app.put('/profile', async (req, res) => {
+  const {
+    username,
+    email,
+    birthday,
+    gender,
+    height,
+    weight,
+    fitnessLevel,
+    suggestedWaterMl,
+    bottleSizeMl,
+  } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ success: false, message: 'Missing username' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      `UPDATE users
+       SET email = ?,
+           birthday = ?,
+           gender = ?,
+           height = ?,
+           weight = ?,
+           fitness_level = ?,
+           suggested_water_ml = ?,
+           bottle_size_ml = ?
+       WHERE username = ?`,
+      [
+        email,
+        birthday,
+        gender,
+        height,
+        weight,
+        fitnessLevel,
+        suggestedWaterMl,
+        bottleSizeMl,
+        username,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'Profile updated successfully' });
+  } catch (err) {
+    console.error('PUT /profile error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
 // GET SINGLE USER
 // ────────────────────────────────────────────────────────────────────────────────
 app.get('/user/:username', async (req, res) => {
