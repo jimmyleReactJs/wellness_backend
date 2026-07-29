@@ -333,7 +333,6 @@ app.put('/profile', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
-
 // ────────────────────────────────────────────────────────────────────────────────
 // GET SINGLE USER
 // ────────────────────────────────────────────────────────────────────────────────
@@ -738,6 +737,23 @@ app.get('/videos/:id', async (req, res) => {
     console.error('GET /videos/:id error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.post('/verify-turnstile', async (req, res) => {
+  const { token } = req.body;
+  const secret = '0x4AAAAAADyMK6J3AB_Go769XQEdRXvtWdU'; // keep this server-side only!
+
+  const response = await fetch(
+    'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, response: token }),
+    }
+  );
+
+  const data = await response.json();
+  res.json({ success: data.success });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
