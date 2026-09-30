@@ -265,8 +265,7 @@ app.post('/profile/avatar', uploadAvatar.single('avatar'), async (req, res) => {
     return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
   const relativePath = `/static/avatars/${req.file.filename}`;
-  const fullUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
-  try {
+  const fullUrl = `https://${req.get('host')}${relativePath}`;  try {
     await pool.execute(
       'UPDATE users SET profile_image_url = ? WHERE username = ?',
       [fullUrl, username]
@@ -462,7 +461,7 @@ app.post('/videos/upload', uploadFields, async (req, res) => {
       return res.status(400).json({ error: 'No video_file uploaded' });
     }
     const videoFile = videoArr[0];
-    const videoUrl  = `${req.protocol}://${req.get('host')}/uploads/videos/${videoFile.filename}`;
+    const videoUrl    = `https://${req.get('host')}/uploads/videos/${videoFile.filename}`;
 
     // 2) Determine thumbnail—either uploaded or generate via ffmpeg
     let thumbFilename;
@@ -485,8 +484,7 @@ app.post('/videos/upload', uploadFields, async (req, res) => {
           .on('error', reject);
       });
     }
-    const thumbnailUrl = `${req.protocol}://${req.get('host')}/uploads/videos/${thumbFilename}`;
-
+    const thumbnailUrl = `https://${req.get('host')}/uploads/videos/${thumbFilename}`;
     // 3) Determine status based on whether user is admin
     const username = req.query.username;
     if (!username) {
@@ -754,6 +752,132 @@ app.post('/verify-turnstile', async (req, res) => {
 
   const data = await response.json();
   res.json({ success: data.success });
+});
+
+// ============================================================
+// NEW ROUTES — paste these into your index.js
+// Add them BEFORE the app.listen(...) line at the bottom.
+//
+// Also apply these TWO fixes to existing lines:
+//   Line ~268:  `${req.protocol}://` → `https://`
+//   Line ~415:  `${req.protocol}://` → `https://`
+//   Line ~465:  `${req.protocol}://` → `https://`
+//   Line ~488:  `${req.protocol}://` → `https://`
+// ============================================================
+
+// ── GET /workouts?username=xxx ──────────────────────────────
+// Returns all saved workouts for a user, with exercise count.
+app.get('/workouts', async (req, res) => {
+  const { username } = req.query;
+  if (!username) return res.status(400).json({ error: 'username required' });
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT sw.id, sw.name, sw.created_at,
+              COUNT(swe.id) AS exercise_count
+       FROM saved_workouts sw
+       LEFT JOIN saved_workout_exercises swe ON swe.workout_id = sw.id
+       WHERE sw.username = ?
+       GROUP BY sw.id
+       ORDER BY sw.created_at DESC`,
+      [username]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /workouts error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /workouts ──────────────────────────────────────────
+// Body: { username, name, exercises: [{video_id, default_sets, default_reps, sort_order}] }
+app.post('/workouts', async (req, res) => {
+  const { username, name, exercises } = req.body;
+  if (!username || !name) {
+    return res.status(400).json({ error: 'username and name required' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
+      'INSERT INTO saved_workouts (username, name) VALUES (?, ?)',
+      [username, name]
+    );
+    const workoutId = result.insertId;
+
+    if (Array.isArray(exercises) && exercises.length > 0) {
+      const rows = exercises.map((e) => [
+        workoutId,
+        e.video_id,
+        e.default_sets ?? 3,
+        e.default_reps ?? 10,
+        e.sort_order ?? 0,
+      ]);
+      await conn.query(
+        `INSERT INTO saved_workout_exercises
+           (workout_id, video_id, default_sets, default_reps, sort_order)
+         VALUES ?`,
+        [rows]
+      );
+    }
+
+    await conn.commit();
+    res.status(201).json({ id: workoutId });
+  } catch (err) {
+    await conn.rollback();
+    console.error('POST /workouts error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// ── DELETE /workouts/:id ────────────────────────────────────
+// Deletes the workout + its exercises (CASCADE handles the join table).
+app.delete('/workouts/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM saved_workouts WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /workouts error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /workouts/:id/exercises ─────────────────────────────
+// Returns exercises for a saved workout, joined with video data,
+// so StartWorkoutScreen can be pre-loaded with the right videos.
+app.get('/workouts/:id/exercises', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT v.id, v.title, v.uploader, v.video_url, v.video_thumbnail_url,
+              v.video_topic, v.upload_date,
+              swe.default_sets, swe.default_reps, swe.sort_order
+       FROM saved_workout_exercises swe
+       JOIN video v ON v.id = swe.video_id
+       WHERE swe.workout_id = ?
+       ORDER BY swe.sort_order ASC`,
+      [req.params.id]
+    );
+    // Map to the same shape your Video.fromJson() expects
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      uploader: r.uploader,
+      video_url: r.video_url,
+      video_thumbnail_url: r.video_thumbnail_url,
+      video_topic: r.video_topic,
+      upload_date: r.upload_date,
+      default_sets: r.default_sets,
+      default_reps: r.default_reps,
+    }));
+    res.json(mapped);
+  } catch (err) {
+    console.error('GET /workouts/:id/exercises error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
